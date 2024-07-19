@@ -4,7 +4,7 @@ import random
 import scipy.sparse as sp
 import numpy as np
 
-### 两个增强视图的生成
+
 def aug_random_mask(input_feature, drop_percent=0.2):
     node_num = input_feature.shape[1]
     mask_num = int(node_num * drop_percent)
@@ -47,7 +47,41 @@ def aug_random_edge(input_adj, drop_percent = 0.2):
         
     return new_adj
 
+def aug_dual_view(input_feature, input_adj, drop_percent=0.2):
+ 
+    node_num = input_feature.shape[1]
+    mask_num = int(node_num * drop_percent)
+    node_idx = list(range(node_num))
+    mask_idx = random.sample(node_idx, mask_num)
 
+    dual_feature = copy.deepcopy(input_feature)
+    zeros = torch.zeros_like(dual_feature[0][0])
+    for j in mask_idx:
+        dual_feature[0][j] = zeros
+
+    row_idx, col_idx = input_adj.nonzero()
+    num_edges = len(row_idx)
+    num_drop = int(num_edges * drop_percent / 2)
+    edge_idx = list(range(num_edges))
+    drop_idx = random.sample(edge_idx, num_drop)
+
+    remaining_edges = set(edge_idx) - set(drop_idx)
+    new_row_idx = [row_idx[i] for i in remaining_edges]
+    new_col_idx = [col_idx[i] for i in remaining_edges]
+
+    possible_edges = [(i, j) for i in range(node_num) for j in range(node_num) if i != j]
+    possible_edges = list(set(possible_edges) - set(zip(row_idx, col_idx)))
+    added_edges = random.sample(possible_edges, num_drop)
+    add_row_idx, add_col_idx = zip(*added_edges)
+
+    final_row_idx = list(new_row_idx) + list(add_row_idx)
+    final_col_idx = list(new_col_idx) + list(add_col_idx)
+    data = np.ones(len(final_row_idx))
+
+    dual_adj = sp.csr_matrix((data, (final_row_idx, final_col_idx)), shape=input_adj.shape)
+
+    return dual_feature, dual_adj
+    
 def aug_drop_node(input_fea, input_adj, drop_percent=0.2):
     input_adj = torch.tensor(input_adj.todense().tolist())
     input_fea = input_fea.squeeze(0)
